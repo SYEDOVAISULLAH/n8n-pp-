@@ -1,5 +1,5 @@
 # Start from the official n8n image
-FROM n8nio/n8n:latest
+FROM n8nio/n8n:1.77.1-debian
 
 # Install dependencies needed for Chromium/Playwright
 RUN apt-get update && apt-get install -y wget gnupg ca-certificates \
