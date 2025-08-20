@@ -1,22 +1,18 @@
-FROM n8nio/n8n:latest
+# Use Debian instead of Alpine
+FROM n8nio/n8n:1.77.1-debian
 
-# Switch to root to install dependencies
 USER root
 
-# Install Chromium dependencies
-RUN apk add --no-cache \
-    nss \
-    chromium \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    nodejs \
-    npm
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget gnupg ca-certificates \
+    fonts-liberation libasound2 libatk1.0-0 libcups2 libdbus-1-3 \
+    libdrm2 libgbm1 libglib2.0-0 libnspr4 libnss3 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxshmfence1 \
+    libxss1 libxtst6 xdg-utils \
+    libu2f-udev libvulkan1 unzip curl
 
-# Install Playwright + browsers
-RUN npm install -g playwright \
-    && npx playwright install --with-deps chromium
+# Install Playwright + Chromium
+RUN npm install -g playwright && npx playwright install --with-deps chromium
 
-# Switch back to n8n user
 USER node
-
