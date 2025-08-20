@@ -1,9 +1,9 @@
 FROM n8nio/n8n:latest
 
-# Switch to root to install packages
+# Switch to root to install dependencies
 USER root
 
-# Install Alpine packages needed for Chromium
+# Install Chromium dependencies
 RUN apk add --no-cache \
     nss \
     chromium \
@@ -13,9 +13,10 @@ RUN apk add --no-cache \
     nodejs \
     npm
 
-# Install Playwright + Chromium
-RUN npm install -g playwright && \
-    npx playwright install chromium
+# Install Playwright + browsers
+RUN npm install -g playwright \
+    && npx playwright install --with-deps chromium
 
-# Switch back to n8n user (important for Railway)
+# Switch back to n8n user
 USER node
+
