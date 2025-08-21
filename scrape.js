@@ -1,18 +1,15 @@
-const puppeteer = require("puppeteer");
+const { chromium } = require('playwright');
 
 (async () => {
-  const url = process.argv[2];
+  const browser = await chromium.launch({
+    executablePath: '/usr/bin/chromium-browser',  // 👈 system Chromium path in Alpine
+    headless: true
+  });
 
-  if (!url || typeof url !== "string" || !url.startsWith("http")) {
-    console.error("❌ Invalid or missing URL argument:", url);
-    process.exit(1);
-  }
-
-  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
+  await page.goto('https://example.com');
 
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  console.log("✅ Loaded:", url);
+  console.log(await page.title());
 
   await browser.close();
 })();
