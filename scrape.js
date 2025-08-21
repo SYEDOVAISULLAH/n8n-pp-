@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
   });
 
   const page = await browser.newPage();
-  await page.goto('https://www.abilenefamilydentistry.com');
+  await page.goto('https://example.com');
 
   console.log(await page.content());
 
