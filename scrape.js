@@ -6,32 +6,31 @@ const { chromium } = require('playwright');
     headless: true
   });
 
-  const urls = process.argv.slice(2); // Take all URLs as arguments
+  const url = process.argv[2]; // 👉 Only handle the single URL for this run
+  let result;
 
-  for (const url of urls) {
-    let result;
-    try {
-      const page = await browser.newPage();
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  try {
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-      // Extract all <a> with href starting with "https://goo.gl/maps"
-      const mapLinks = await page.$$eval('a[href^="https://goo.gl/maps"]', anchors =>
-        anchors.map(a => a.href)
-      );
+    // Extract all <a> with href starting with "https://goo.gl/maps"
+    const mapLinks = await page.$$eval('a[href^="https://goo.gl/maps"]', anchors =>
+      anchors.map(a => a.href)
+    );
 
-      // Remove duplicates
-      const uniqueLinks = [...new Set(mapLinks)];
+    // Remove duplicates
+    const uniqueLinks = [...new Set(mapLinks)];
 
-      result = { mapLinks: uniqueLinks };
+    // ✅ Only return mapLinks (not all URLs)
+    result = { mapLinks: uniqueLinks };
 
-      await page.close();
-    } catch (err) {
-      result = { error: err.message };
-    }
-
-    // 👉 Output one line of JSON per site (n8n treats each as a separate item)
-    console.log(JSON.stringify(result));
+    await page.close();
+  } catch (err) {
+    result = { mapLinks: [], error: err.message };
   }
+
+  // 👉 Output exactly ONE JSON per run
+  console.log(JSON.stringify(result));
 
   await browser.close();
 })();
