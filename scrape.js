@@ -6,36 +6,32 @@ const { chromium } = require('playwright');
     headless: true
   });
 
-  const urls = [
-    "http://www.kuhndentist.com",
-    "http://www.abilenefamilydentistry.com",
-    "http://www.acworthpremierdentalcare.com"
-  ];
-
-  const results = [];
+  const urls = process.argv.slice(2); // Take all URLs as arguments
 
   for (const url of urls) {
-    const page = await browser.newPage();
+    let result;
     try {
-      await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-      // Extract all <a> with goo.gl/maps
-      const mapLinks = await page.$$eval("a", (anchors) =>
-        anchors
-          .map((a) => a.href)
-          .filter((href) => href.startsWith("https://goo.gl/maps"))
+      // Extract all <a> with href starting with "https://goo.gl/maps"
+      const mapLinks = await page.$$eval('a[href^="https://goo.gl/maps"]', anchors =>
+        anchors.map(a => a.href)
       );
 
-      results.push({ url, mapLinks });
-    } catch (err) {
-      results.push({ url, mapLinks: [], error: err.message });
-    } finally {
+      // Remove duplicates
+      const uniqueLinks = [...new Set(mapLinks)];
+
+      result = { url, mapLinks: uniqueLinks };
+
       await page.close();
+    } catch (err) {
+      result = { url, error: err.message };
     }
+
+    // 👉 Output one line of JSON per site (n8n treats each as a separate item)
+    console.log(JSON.stringify(result));
   }
 
   await browser.close();
-
-  // Print once as an array (n8n will split nicely)
-  console.log(JSON.stringify(results));
 })();
