@@ -26,7 +26,7 @@ const { chromium } = require('playwright');
 
     await page.close();
   } catch (err) {
-    result = { mapLinks: [], error: err.message };
+    result = { mapLinks, error: err.message };
   }
 
   // 👉 Output exactly ONE JSON per run
