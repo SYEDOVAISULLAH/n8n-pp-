@@ -22,7 +22,7 @@ const { chromium } = require('playwright');
       // Remove duplicates
       const uniqueLinks = [...new Set(mapLinks)];
 
-      result = { url, mapLinks: uniqueLinks };
+      result = { mapLinks: uniqueLinks };
 
       await page.close();
     } catch (err) {
