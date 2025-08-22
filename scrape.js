@@ -6,7 +6,7 @@ const { chromium } = require('playwright');
     headless: true
   });
 
-  const url = process.argv[2]; // 👉 Only handle the single URL for this run
+  const url = process.argv[2]; // take just one URL
   let result;
 
   try {
@@ -21,15 +21,13 @@ const { chromium } = require('playwright');
     // Remove duplicates
     const uniqueLinks = [...new Set(mapLinks)];
 
-    // ✅ Only return mapLinks (not all URLs)
     result = { mapLinks: uniqueLinks };
 
     await page.close();
   } catch (err) {
-    result = { mapLinks, error: err.message };
+    result = { error: err.message };
   }
 
-  // 👉 Output exactly ONE JSON per run
   console.log(JSON.stringify(result));
 
   await browser.close();
