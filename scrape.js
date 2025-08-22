@@ -26,7 +26,7 @@ const { chromium } = require('playwright');
 
       await page.close();
     } catch (err) {
-      result = { url, error: err.message };
+      result = { error: err.message };
     }
 
     // 👉 Output one line of JSON per site (n8n treats each as a separate item)
