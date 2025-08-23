@@ -6,29 +6,32 @@ const { chromium } = require('playwright');
     headless: true
   });
 
-  const url = process.argv[2]; // take just one URL
-  let result;
+  const urls = process.argv.slice(2); // Take all URLs as arguments
 
-  try {
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  for (const url of urls) {
+    let result;
+    try {
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    // Extract all <a> with href starting with "https://goo.gl/maps"
-    const mapLinks = await page.$$eval('a[href^="https://goo.gl/maps"]', anchors =>
-      anchors.map(a => a.href)
-    );
+      // Extract all <a> with href starting with "https://goo.gl/maps"
+      const mapLinks = await page.$$eval('a[href^="https://goo.gl/maps"]', anchors =>
+        anchors.map(a => a.href)
+      );
 
-    // Remove duplicates
-    const uniqueLinks = [...new Set(mapLinks)];
+      // Remove duplicates
+      const uniqueLinks = [...new Set(mapLinks)];
 
-    result = { mapLinks: uniqueLinks };
+      result = { url, mapLinks: uniqueLinks };
 
-    await page.close();
-  } catch (err) {
-    result = { error: err.message };
+      await page.close();
+    } catch (err) {
+      result = { url, error: err.message };
+    }
+
+    // 👉 Output one line of JSON per site (n8n treats each as a separate item)
+    console.log(JSON.stringify(result));
   }
-
-  console.log(JSON.stringify(result));
 
   await browser.close();
 })();
