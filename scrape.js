@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
   const urls = process.argv.slice(2);
 
   for (const url of urls) {
-    let result = { url, mapLinks: [] };
+    let result = { url, mapLinks: [], addresses: [] };
 
     try {
       const page = await browser.newPage();
@@ -20,38 +20,27 @@ const { chromium } = require('playwright');
         timeout: 60000
       });
 
-      // Capture HTTP status
       if (response) {
         result.status = response.status();
         result.statusText = response.statusText();
-      } else {
-        result.status = "NO_RESPONSE";
-        result.statusText = "No response (possibly blocked by region)";
       }
 
-      // If site is not OK, no need to continue
-      if (!response || response.status() >= 400) {
-        await page.close();
-        console.log(JSON.stringify(result));
-        continue;
-      }
-
-      // Wait for maps to load
+      // Wait for content to fully load
       await page.waitForTimeout(5000);
 
-      // 1. Google Maps shortlinks in <a>
+      // 1. Google Maps shortlinks
       const mapLinksA = await page.$$eval(
         'a[href*="google.com/maps"], a[href^="https://goo.gl/maps"]',
         anchors => anchors.map(a => a.href)
       );
 
-      // 2. Google Maps embeds in iframes
+      // 2. Google Maps iframes
       const mapLinksIframe = await page.$$eval(
         'iframe[src*="google.com/maps"]',
         iframes => iframes.map(f => f.src)
       );
 
-      // 3. OpenStreetMap / Mapbox embeds
+      // 3. OpenStreetMap / Mapbox iframes
       const mapLinksOSM = await page.$$eval(
         'iframe[src*="openstreetmap.org"], iframe[src*="mapbox.com"]',
         iframes => iframes.map(f => f.src)
@@ -59,12 +48,24 @@ const { chromium } = require('playwright');
 
       result.mapLinks = [...new Set([...mapLinksA, ...mapLinksIframe, ...mapLinksOSM])];
 
+      // 4. If no map links found, try extracting plain text addresses
+      if (result.mapLinks.length === 0) {
+        const bodyText = await page.evaluate(() => document.body.innerText);
+
+        // Simple U.S. address regex (street + city + state + zip)
+        const addressRegex = /\d{1,5}\s[\w\s.,-]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct)\s*[\s\S]{0,50}?\b[A-Z][a-z]+,\s*[A-Z]{2}\s*\d{5}/g;
+
+        const matches = bodyText.match(addressRegex);
+        if (matches) {
+          result.addresses = matches.map(addr => addr.trim());
+        }
+      }
+
       await page.close();
     } catch (err) {
       result.error = err.message;
     }
 
-    // Always output JSON
     console.log(JSON.stringify(result));
   }
 
