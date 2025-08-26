@@ -5,7 +5,10 @@ const { chromium } = require("playwright");
   const query = `${person} ${company} ${city} ${state}`;
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 
-  const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: '/usr/bin/chromium-browser'
+});
   const page = await browser.newPage();
   await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
 
