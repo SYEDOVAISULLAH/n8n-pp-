@@ -3,17 +3,17 @@ const { chromium } = require("playwright");
 (async () => {
   const [,, person, company, city, state] = process.argv;
   const query = `${person} ${company} ${city} ${state}`;
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
 
-const browser = await chromium.launch({
-  headless: true,
-  executablePath: '/usr/bin/chromium-browser'
-});
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: '/usr/bin/chromium-browser'
+  });
   const page = await browser.newPage();
   await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
 
   // Grab first 5 result links
-  const links = await page.$$eval('a', as => as
+  const links = await page.$$eval('a.result__a', as => as
     .map(a => a.href)
     .filter(href => href.startsWith("http"))
     .slice(0, 5)
@@ -51,3 +51,4 @@ const browser = await chromium.launch({
     verified
   }, null, 2));
 })();
+
