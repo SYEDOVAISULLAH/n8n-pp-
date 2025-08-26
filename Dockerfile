@@ -24,7 +24,8 @@ RUN mkdir -p /home/node/scripts
 
 # Copy your Playwright script(s) into container
 COPY scrape.js /home/node/scripts/scrape.js
-COPY verify.js /home/node/scripts/
+COPY verify.js /home/node/scripts/verify.js
+
 
 # Give ownership to node user
 RUN chown -R node:node /home/node/scripts
