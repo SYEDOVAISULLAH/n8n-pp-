@@ -3,21 +3,35 @@ const { chromium } = require("playwright");
 (async () => {
   const [,, person, company, city, state] = process.argv;
   const query = `${person} ${company} ${city} ${state}`;
-  const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+  let searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
 
   const browser = await chromium.launch({
     headless: true,
     executablePath: '/usr/bin/chromium-browser'
   });
   const page = await browser.newPage();
-  await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
 
-  // Grab first 5 result links
-  const links = await page.$$eval('a.result__a', as => as
-    .map(a => a.href)
-    .filter(href => href.startsWith("http"))
-    .slice(0, 5)
-  );
+  let links = [];
+
+  try {
+    await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("a.result__a", { timeout: 10000 });
+    links = await page.$$eval("a.result__a", as =>
+      as.map(a => a.href).filter(href => href.startsWith("http")).slice(0, 5)
+    );
+  } catch (e) {
+    // ignore, will try Bing
+  }
+
+  // Fallback to Bing if DuckDuckGo gave no results
+  if (links.length === 0) {
+    searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+    await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("li.b_algo h2 a", { timeout: 10000 });
+    links = await page.$$eval("li.b_algo h2 a", as =>
+      as.map(a => a.href).filter(href => href.startsWith("http")).slice(0, 5)
+    );
+  }
 
   let verified = false;
 
@@ -51,4 +65,3 @@ const { chromium } = require("playwright");
     verified
   }, null, 2));
 })();
-
