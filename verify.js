@@ -3,9 +3,9 @@ const { chromium } = require("playwright");
 (async () => {
   const [,, person, company, city, state] = process.argv;
   const query = `${person} ${company} ${city} ${state}`;
-  let searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
   const log = [];
 
+  // Launch browser
   const browser = await chromium.launch({
     headless: true,
     executablePath: '/usr/bin/chromium-browser'
@@ -15,7 +15,7 @@ const { chromium } = require("playwright");
   async function getLinks(selectors, engineName) {
     for (const sel of selectors) {
       try {
-        await page.waitForSelector(sel, { timeout: 10000 }); // Increased timeout to 10 seconds
+        await page.waitForSelector(sel, { timeout: 20000 }); // Increased timeout to 20 seconds
         const found = await page.$$eval(sel, as =>
           as.map(a => a.href).filter(h => h.startsWith("http"))
         );
@@ -65,8 +65,9 @@ const { chromium } = require("playwright");
       await resPage.goto(link, { timeout: 20000, waitUntil: "domcontentloaded" }); // Increased timeout
       const text = await resPage.content();
 
-      // Check if both person's name and company are mentioned on the page
-      if (text.includes(person) && text.includes(company)) {
+      // Normalize text and check if both person's name and company are mentioned on the page
+      const pageText = text.toLowerCase();  // Make it case-insensitive
+      if (pageText.includes(person.toLowerCase()) && pageText.includes(company.toLowerCase())) {
         verified = true;
         log.push(`Verified match on ${link}`);
         await resPage.close();
@@ -89,7 +90,7 @@ const { chromium } = require("playwright");
     city,
     state,
     query,
-    searchUrl,
+    searchUrl: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,  // Use the DuckDuckGo query URL
     checkedLinks: links,
     verified,
     log
