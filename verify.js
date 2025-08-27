@@ -1,8 +1,8 @@
 const { chromium } = require("playwright");
 
-// List of proxies (you can update or fetch these dynamically)
+// List of proxies (add more free proxies here if necessary)
 const proxies = [
-  "http://51.158.68.133:8811",  // Example proxies (replace with your own)
+  "http://51.158.68.133:8811",  // Example proxies
   "http://185.44.12.85:8080",
   "http://51.15.79.41:3128"
 ];
@@ -12,13 +12,12 @@ const proxies = [
   const query = `${person} ${company} ${city} ${state}`;
   const log = [];
 
-  // Launch browser
   const browser = await chromium.launch({
     headless: true,
-    executablePath: '/usr/bin/chromium-browser'
+    executablePath: '/usr/bin/chromium-browser',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
-  
-  // Use a single page for all verification
+
   const page = await browser.newPage();
 
   // Function to randomly pick a proxy from the list
@@ -29,69 +28,59 @@ const proxies = [
 
   // Function to apply the selected proxy
   const applyProxy = async () => {
-    const proxy = getRandomProxy();  // Get a random proxy from the list
+    const proxy = getRandomProxy();
     await page.context().setHTTPCredentials({
       proxy: {
-        server: proxy,  // Apply the proxy to the page
+        server: proxy, // Apply the proxy to the page
       }
     });
-    log.push(`Using proxy: ${proxy}`);  // Log the proxy being used
+    log.push(`Using proxy: ${proxy}`);
   };
 
-  async function getLinks(selectors, engineName) {
+  const engines = [
+    { name: 'Google', url: `https://www.google.com/search?q=${encodeURIComponent(query)}`, selectors: ["h3", ".tF2Cxc"] },
+    { name: 'LinkedIn', url: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(person)}%20${encodeURIComponent(company)}`, selectors: ["a.search-result__result-link"] }
+  ];
+
+  // Search and verify in parallel
+  const enginePromises = engines.map(engine => {
+    return page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 30000 })
+      .then(async () => {
+        await applyProxy();
+        return getLinks(engine.selectors, engine.name);
+      })
+      .catch(e => log.push(`${engine.name} failed to load: ${e.message}`));
+  });
+
+  const getLinks = async (selectors, engineName) => {
     for (const sel of selectors) {
       try {
-        await page.waitForSelector(sel, { timeout: 10000 }); // Timeout reduced for faster execution
-        const found = await page.$$eval(sel, as =>
-          as.map(a => a.href).filter(h => h.startsWith("http"))
+        await page.waitForSelector(sel, { timeout: 20000 });
+        const found = await page.$$eval(sel, as => 
+          as.map(a => a.href).filter(h => h && h.startsWith("http"))
         );
         if (found.length) {
           log.push(`${engineName}: Found ${found.length} results with selector ${sel}`);
           return found;
         } else {
-          log.push(`${engineName}: Selector ${sel} returned no links`);
+          log.push(`${engineName}: No results found`);
         }
       } catch (e) {
         log.push(`${engineName}: Failed on selector ${sel} → ${e.message}`);
       }
     }
     return [];
-  }
+  };
 
-  let links = [];
-
-  // Search engines list with respective selectors
-  const engines = [
-    { name: 'DuckDuckGo', url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`, selectors: ["a.result__a", "a[data-testid='result-title-a']"] },
-    { name: 'Bing', url: `https://www.bing.com/search?q=${encodeURIComponent(query)}`, selectors: ["li.b_algo h2 a", ".b_title h2 a", ".b_algo a"] },
-    { name: 'Google', url: `https://www.google.com/search?q=${encodeURIComponent(query)}`, selectors: ["h3", ".tF2Cxc"] },
-    { name: 'Yahoo', url: `https://search.yahoo.com/search?p=${encodeURIComponent(query)}`, selectors: ["h3 a", ".ac-algo"] },
-  ];
-
-  // Run the search engines in parallel
-  const enginePromises = engines.map(engine => {
-    return page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 10000 })  // Timeout reduced for faster execution
-      .then(async () => {
-        await applyProxy();  // Apply a random proxy before scraping
-        return getLinks(engine.selectors, engine.name);
-      })
-      .catch(e => log.push(`${engine.name} failed to load: ${e.message}`));
-  });
-
-  // Wait for all engines to finish
   const allLinks = await Promise.all(enginePromises);
-  links = allLinks.flat().slice(0, 3);  // Limit to the first 3 links for each engine
-
   let verified = false;
 
-  // Loop through links to verify if the person is listed with the company
-  const verificationPromises = links.map(async (link) => {
+  const verificationPromises = allLinks.flat().map(async (link) => {
     try {
-      await page.goto(link, { timeout: 10000, waitUntil: "domcontentloaded" }); // Timeout reduced
+      await page.goto(link, { timeout: 10000, waitUntil: "domcontentloaded" });
       const text = await page.content();
 
-      // Normalize text and check if both person's name and company are mentioned on the page
-      const pageText = text.toLowerCase();  // Case insensitive
+      const pageText = text.toLowerCase(); // Case insensitive search
       if (pageText.includes(person.toLowerCase()) && pageText.includes(company.toLowerCase())) {
         verified = true;
         log.push(`Verified match on ${link}`);
@@ -103,20 +92,16 @@ const proxies = [
     }
   });
 
-  // Wait for all verification tasks to complete
   await Promise.all(verificationPromises);
 
   await browser.close();
 
-  // Output the results in a structured JSON format
   console.log(JSON.stringify({
     person,
     company,
     city,
     state,
     query,
-    searchUrl: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,  // Use the DuckDuckGo query URL
-    checkedLinks: links,
     verified,
     log
   }, null, 2));
