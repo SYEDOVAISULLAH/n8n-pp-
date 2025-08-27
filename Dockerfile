@@ -2,7 +2,7 @@ FROM n8nio/n8n:1.107.3
 
 USER root
 
-# Install dependencies for Playwright/Chromium
+# Install dependencies for Playwright/Chromium and node-fetch
 RUN apk add --no-cache \
     bash \
     wget \
@@ -14,10 +14,11 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont \
     chromium \
-    chromium-chromedriver
+    chromium-chromedriver \
+    && npm install -g playwright node-fetch
 
 # Install Playwright + Chromium
-RUN npm install -g playwright && npx playwright install chromium
+RUN npx playwright install chromium
 
 # Create directory for custom scripts
 RUN mkdir -p /home/node/scripts
@@ -26,8 +27,10 @@ RUN mkdir -p /home/node/scripts
 COPY scrape.js /home/node/scripts/scrape.js
 COPY verify.js /home/node/scripts/verify.js
 
-
 # Give ownership to node user
 RUN chown -R node:node /home/node/scripts
+
+# Set environment variables for proxies (if you want to pass them in container)
+# ENV PROXY_LIST="http://51.158.68.133:8811, http://185.44.12.85:8080"
 
 USER node
