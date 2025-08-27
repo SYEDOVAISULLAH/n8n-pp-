@@ -59,7 +59,7 @@ const { chromium } = require("playwright");
   let verified = false;
 
   // Loop through links to verify if the person is listed with the company
-  for (const link of links) {
+  const verificationPromises = links.map(async (link) => {
     try {
       const resPage = await browser.newPage();
       await resPage.goto(link, { timeout: 20000, waitUntil: "domcontentloaded" }); // Increased timeout
@@ -71,15 +71,17 @@ const { chromium } = require("playwright");
         verified = true;
         log.push(`Verified match on ${link}`);
         await resPage.close();
-        break; // Exit loop once a match is found
       } else {
         log.push(`Checked ${link} → no match`);
+        await resPage.close();
       }
-      await resPage.close();
     } catch (e) {
       log.push(`Error visiting ${link}: ${e.message}`);
     }
-  }
+  });
+
+  // Wait for all verification tasks to complete
+  await Promise.all(verificationPromises);
 
   await browser.close();
 
