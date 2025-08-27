@@ -10,12 +10,14 @@ const { chromium } = require("playwright");
     headless: true,
     executablePath: '/usr/bin/chromium-browser'
   });
+  
+  // Use a single page for all verification
   const page = await browser.newPage();
 
   async function getLinks(selectors, engineName) {
     for (const sel of selectors) {
       try {
-        await page.waitForSelector(sel, { timeout: 20000 }); // Increased timeout to 20 seconds
+        await page.waitForSelector(sel, { timeout: 10000 }); // Timeout reduced for faster execution
         const found = await page.$$eval(sel, as =>
           as.map(a => a.href).filter(h => h.startsWith("http"))
         );
@@ -42,38 +44,32 @@ const { chromium } = require("playwright");
     { name: 'Yahoo', url: `https://search.yahoo.com/search?p=${encodeURIComponent(query)}`, selectors: ["h3 a", ".ac-algo"] },
   ];
 
-  // Iterate through engines and try to get links
-  for (const engine of engines) {
-    try {
-      await page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 20000 }); // Increased timeout to 20 seconds
-      log.push(`Navigated to ${engine.name}`);
-      links = await getLinks(engine.selectors, engine.name);
-      if (links.length) break; // Stop if links are found
-    } catch (e) {
-      log.push(`${engine.name} navigation failed: ${e.message}`);
-    }
-  }
+  // Run the search engines in parallel
+  const enginePromises = engines.map(engine => {
+    return page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 10000 })  // Timeout reduced for faster execution
+      .then(() => getLinks(engine.selectors, engine.name))
+      .catch(e => log.push(`${engine.name} failed to load: ${e.message}`));
+  });
 
-  links = links.slice(0, 5); // Limit the results to the first 5 links
+  // Wait for all engines to finish
+  const allLinks = await Promise.all(enginePromises);
+  links = allLinks.flat().slice(0, 3);  // Limit to the first 3 links for each engine
 
   let verified = false;
 
   // Loop through links to verify if the person is listed with the company
   const verificationPromises = links.map(async (link) => {
     try {
-      const resPage = await browser.newPage();
-      await resPage.goto(link, { timeout: 20000, waitUntil: "domcontentloaded" }); // Increased timeout
-      const text = await resPage.content();
+      await page.goto(link, { timeout: 10000, waitUntil: "domcontentloaded" }); // Timeout reduced
+      const text = await page.content();
 
       // Normalize text and check if both person's name and company are mentioned on the page
-      const pageText = text.toLowerCase();  // Make it case-insensitive
+      const pageText = text.toLowerCase();  // Case insensitive
       if (pageText.includes(person.toLowerCase()) && pageText.includes(company.toLowerCase())) {
         verified = true;
         log.push(`Verified match on ${link}`);
-        await resPage.close();
       } else {
         log.push(`Checked ${link} → no match`);
-        await resPage.close();
       }
     } catch (e) {
       log.push(`Error visiting ${link}: ${e.message}`);
