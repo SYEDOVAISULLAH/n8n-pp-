@@ -4,6 +4,7 @@ const { chromium } = require("playwright");
   const [,, person, company, city, state] = process.argv;
   const query = `${person} ${company} ${city} ${state}`;
   let searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+  const log = [];
 
   const browser = await chromium.launch({
     headless: true,
@@ -11,16 +12,21 @@ const { chromium } = require("playwright");
   });
   const page = await browser.newPage();
 
-  async function getLinks(selectors) {
+  async function getLinks(selectors, engineName) {
     for (const sel of selectors) {
       try {
         await page.waitForSelector(sel, { timeout: 3000 });
         const found = await page.$$eval(sel, as =>
           as.map(a => a.href).filter(h => h.startsWith("http"))
         );
-        if (found.length) return found;
+        if (found.length) {
+          log.push(`${engineName}: Found ${found.length} results with selector ${sel}`);
+          return found;
+        } else {
+          log.push(`${engineName}: Selector ${sel} returned no links`);
+        }
       } catch (e) {
-        // ignore and try next selector
+        log.push(`${engineName}: Failed on selector ${sel} → ${e.message}`);
       }
     }
     return [];
@@ -31,12 +37,13 @@ const { chromium } = require("playwright");
   // Try DuckDuckGo first
   try {
     await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    log.push("Navigated to DuckDuckGo");
     links = await getLinks([
       "a.result__a",
       "a[data-testid='result-title-a']"
-    ]);
+    ], "DuckDuckGo");
   } catch (e) {
-    // ignore, fallback to Bing
+    log.push(`DuckDuckGo navigation failed: ${e.message}`);
   }
 
   // Fallback to Bing
@@ -44,17 +51,18 @@ const { chromium } = require("playwright");
     searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
     try {
       await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+      log.push("Navigated to Bing");
       links = await getLinks([
         "li.b_algo h2 a",
         ".b_title h2 a",
         ".b_algo a"
-      ]);
+      ], "Bing");
     } catch (e) {
-      // ignore
+      log.push(`Bing navigation failed: ${e.message}`);
     }
   }
 
-  links = links.slice(0, 5); // keep top 5
+  links = links.slice(0, 5);
 
   let verified = false;
 
@@ -66,12 +74,15 @@ const { chromium } = require("playwright");
 
       if (text.includes(person) && text.includes(company)) {
         verified = true;
+        log.push(`Verified match on ${link}`);
         await resPage.close();
         break;
+      } else {
+        log.push(`Checked ${link} → no match`);
       }
       await resPage.close();
     } catch (e) {
-      // ignore bad links
+      log.push(`Error visiting ${link}: ${e.message}`);
     }
   }
 
@@ -85,6 +96,8 @@ const { chromium } = require("playwright");
     query,
     searchUrl,
     checkedLinks: links,
-    verified
+    verified,
+    log
   }, null, 2));
 })();
+
