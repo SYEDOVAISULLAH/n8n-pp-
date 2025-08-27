@@ -1,5 +1,12 @@
 const { chromium } = require("playwright");
 
+// List of proxies (you can update or fetch these dynamically)
+const proxies = [
+  "http://51.158.68.133:8811",  // Example proxies (replace with your own)
+  "http://185.44.12.85:8080",
+  "http://51.15.79.41:3128"
+];
+
 (async () => {
   const [,, person, company, city, state] = process.argv;
   const query = `${person} ${company} ${city} ${state}`;
@@ -13,6 +20,23 @@ const { chromium } = require("playwright");
   
   // Use a single page for all verification
   const page = await browser.newPage();
+
+  // Function to randomly pick a proxy from the list
+  const getRandomProxy = () => {
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    return proxy;
+  };
+
+  // Function to apply the selected proxy
+  const applyProxy = async () => {
+    const proxy = getRandomProxy();  // Get a random proxy from the list
+    await page.context().setHTTPCredentials({
+      proxy: {
+        server: proxy,  // Apply the proxy to the page
+      }
+    });
+    log.push(`Using proxy: ${proxy}`);  // Log the proxy being used
+  };
 
   async function getLinks(selectors, engineName) {
     for (const sel of selectors) {
@@ -47,7 +71,10 @@ const { chromium } = require("playwright");
   // Run the search engines in parallel
   const enginePromises = engines.map(engine => {
     return page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 10000 })  // Timeout reduced for faster execution
-      .then(() => getLinks(engine.selectors, engine.name))
+      .then(async () => {
+        await applyProxy();  // Apply a random proxy before scraping
+        return getLinks(engine.selectors, engine.name);
+      })
       .catch(e => log.push(`${engine.name} failed to load: ${e.message}`));
   });
 
