@@ -11,34 +11,57 @@ const { chromium } = require("playwright");
   });
   const page = await browser.newPage();
 
+  async function getLinks(selectors) {
+    for (const sel of selectors) {
+      try {
+        await page.waitForSelector(sel, { timeout: 3000 });
+        const found = await page.$$eval(sel, as =>
+          as.map(a => a.href).filter(h => h.startsWith("http"))
+        );
+        if (found.length) return found;
+      } catch (e) {
+        // ignore and try next selector
+      }
+    }
+    return [];
+  }
+
   let links = [];
 
+  // Try DuckDuckGo first
   try {
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("a.result__a", { timeout: 10000 });
-    links = await page.$$eval("a.result__a", as =>
-      as.map(a => a.href).filter(href => href.startsWith("http")).slice(0, 5)
-    );
+    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    links = await getLinks([
+      "a.result__a",
+      "a[data-testid='result-title-a']"
+    ]);
   } catch (e) {
-    // ignore, will try Bing
+    // ignore, fallback to Bing
   }
 
-  // Fallback to Bing if DuckDuckGo gave no results
+  // Fallback to Bing
   if (links.length === 0) {
     searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("li.b_algo h2 a", { timeout: 10000 });
-    links = await page.$$eval("li.b_algo h2 a", as =>
-      as.map(a => a.href).filter(href => href.startsWith("http")).slice(0, 5)
-    );
+    try {
+      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+      links = await getLinks([
+        "li.b_algo h2 a",
+        ".b_title h2 a",
+        ".b_algo a"
+      ]);
+    } catch (e) {
+      // ignore
+    }
   }
+
+  links = links.slice(0, 5); // keep top 5
 
   let verified = false;
 
   for (const link of links) {
     try {
       const resPage = await browser.newPage();
-      await resPage.goto(link, { timeout: 15000 });
+      await resPage.goto(link, { timeout: 15000, waitUntil: "domcontentloaded" });
       const text = await resPage.content();
 
       if (text.includes(person) && text.includes(company)) {
