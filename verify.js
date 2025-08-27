@@ -15,7 +15,7 @@ const { chromium } = require("playwright");
   async function getLinks(selectors, engineName) {
     for (const sel of selectors) {
       try {
-        await page.waitForSelector(sel, { timeout: 3000 });
+        await page.waitForSelector(sel, { timeout: 10000 }); // Increased timeout to 10 seconds
         const found = await page.$$eval(sel, as =>
           as.map(a => a.href).filter(h => h.startsWith("http"))
         );
@@ -34,49 +34,43 @@ const { chromium } = require("playwright");
 
   let links = [];
 
-  // Try DuckDuckGo first
-  try {
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-    log.push("Navigated to DuckDuckGo");
-    links = await getLinks([
-      "a.result__a",
-      "a[data-testid='result-title-a']"
-    ], "DuckDuckGo");
-  } catch (e) {
-    log.push(`DuckDuckGo navigation failed: ${e.message}`);
-  }
+  // Search engines list with respective selectors
+  const engines = [
+    { name: 'DuckDuckGo', url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`, selectors: ["a.result__a", "a[data-testid='result-title-a']"] },
+    { name: 'Bing', url: `https://www.bing.com/search?q=${encodeURIComponent(query)}`, selectors: ["li.b_algo h2 a", ".b_title h2 a", ".b_algo a"] },
+    { name: 'Google', url: `https://www.google.com/search?q=${encodeURIComponent(query)}`, selectors: ["h3", ".tF2Cxc"] },
+    { name: 'Yahoo', url: `https://search.yahoo.com/search?p=${encodeURIComponent(query)}`, selectors: ["h3 a", ".ac-algo"] },
+  ];
 
-  // Fallback to Bing
-  if (links.length === 0) {
-    searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+  // Iterate through engines and try to get links
+  for (const engine of engines) {
     try {
-      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-      log.push("Navigated to Bing");
-      links = await getLinks([
-        "li.b_algo h2 a",
-        ".b_title h2 a",
-        ".b_algo a"
-      ], "Bing");
+      await page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 20000 }); // Increased timeout to 20 seconds
+      log.push(`Navigated to ${engine.name}`);
+      links = await getLinks(engine.selectors, engine.name);
+      if (links.length) break; // Stop if links are found
     } catch (e) {
-      log.push(`Bing navigation failed: ${e.message}`);
+      log.push(`${engine.name} navigation failed: ${e.message}`);
     }
   }
 
-  links = links.slice(0, 5);
+  links = links.slice(0, 5); // Limit the results to the first 5 links
 
   let verified = false;
 
+  // Loop through links to verify if the person is listed with the company
   for (const link of links) {
     try {
       const resPage = await browser.newPage();
-      await resPage.goto(link, { timeout: 15000, waitUntil: "domcontentloaded" });
+      await resPage.goto(link, { timeout: 20000, waitUntil: "domcontentloaded" }); // Increased timeout
       const text = await resPage.content();
 
+      // Check if both person's name and company are mentioned on the page
       if (text.includes(person) && text.includes(company)) {
         verified = true;
         log.push(`Verified match on ${link}`);
         await resPage.close();
-        break;
+        break; // Exit loop once a match is found
       } else {
         log.push(`Checked ${link} → no match`);
       }
@@ -88,6 +82,7 @@ const { chromium } = require("playwright");
 
   await browser.close();
 
+  // Output the results in a structured JSON format
   console.log(JSON.stringify({
     person,
     company,
@@ -100,4 +95,3 @@ const { chromium } = require("playwright");
     log
   }, null, 2));
 })();
-
