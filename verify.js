@@ -1,66 +1,104 @@
 const { chromium } = require("playwright");
 
-async function verify(entry) {
-  const browser = await chromium.launch({ headless: true });
+(async () => {
+  const [,, person, company, city, state] = process.argv;
+  const query = `${person} ${company} ${city} ${state}`;
+  let searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+  const log = [];
+
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: '/usr/bin/chromium-browser'
+  });
   const page = await browser.newPage();
 
-  entry.log = entry.log || [];
+  async function getLinks(selectors, engineName) {
+    for (const sel of selectors) {
+      try {
+        await page.waitForSelector(sel, { timeout: 3000 });
+        const found = await page.$$eval(sel, as =>
+          as.map(a => a.href).filter(h => h.startsWith("http"))
+        );
+        if (found.length) {
+          log.push(`${engineName}: Found ${found.length} results with selector ${sel}`);
+          return found;
+        } else {
+          log.push(`${engineName}: Selector ${sel} returned no links`);
+        }
+      } catch (e) {
+        log.push(`${engineName}: Failed on selector ${sel} → ${e.message}`);
+      }
+    }
+    return [];
+  }
 
-  const searchEngines = [
-    {
-      name: "duckduckgo",
-      url: q => `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
-      selectors: ["a.result__a", "a[data-testid='result-title-a']"],
-    },
-    {
-      name: "bing",
-      url: q => `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
-      selectors: [
+  let links = [];
+
+  // Try DuckDuckGo first
+  try {
+    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    log.push("Navigated to DuckDuckGo");
+    links = await getLinks([
+      "a.result__a",
+      "a[data-testid='result-title-a']"
+    ], "DuckDuckGo");
+  } catch (e) {
+    log.push(`DuckDuckGo navigation failed: ${e.message}`);
+  }
+
+  // Fallback to Bing
+  if (links.length === 0) {
+    searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+    try {
+      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+      log.push("Navigated to Bing");
+      links = await getLinks([
         "li.b_algo h2 a",
         ".b_title h2 a",
         ".b_algo a"
-      ],
-    },
-  ];
-
-  let verified = false;
-
-  for (const engine of searchEngines) {
-    try {
-      entry.searchEngine = engine.name;
-      const searchUrl = engine.url(entry.query);
-      entry.searchUrl = searchUrl;
-
-      await page.goto(searchUrl, { timeout: 15000 });
-      entry.log.push(`Navigated to ${engine.name}: ${searchUrl}`);
-
-      let link = null;
-
-      for (const selector of engine.selectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-          const element = await page.locator(selector).first();
-          link = await element.getAttribute("href");
-          if (link) {
-            entry.checkedLinks.push(link);
-            entry.log.push(`${engine.name}: Found link with selector ${selector} → ${link}`);
-            verified = true;
-            break;
-          }
-        } catch (err) {
-          entry.log.push(`${engine.name}: Failed selector ${selector} → ${err.message}`);
-        }
-      }
-
-      if (verified) break;
-    } catch (err) {
-      entry.log.push(`${engine.name}: Navigation error → ${err.message}`);
+      ], "Bing");
+    } catch (e) {
+      log.push(`Bing navigation failed: ${e.message}`);
     }
   }
 
-  entry.verified = verified;
-  await browser.close();
-  return entry;
-}
+  links = links.slice(0, 5);
 
-module.exports = verify;
+  let verified = false;
+
+  for (const link of links) {
+    try {
+      const resPage = await browser.newPage();
+      await resPage.goto(link, { timeout: 15000, waitUntil: "domcontentloaded" });
+      const text = await resPage.content();
+
+      if (text.includes(person) && text.includes(company)) {
+        verified = true;
+        log.push(`Verified match on ${link}`);
+        await resPage.close();
+        break;
+      } else {
+        log.push(`Checked ${link} → no match`);
+      }
+      await resPage.close();
+    } catch (e) {
+      log.push(`Error visiting ${link}: ${e.message}`);
+    }
+  }
+
+  await browser.close();
+
+  console.log(JSON.stringify({
+    person,
+    company,
+    city,
+    state,
+    query,
+    searchUrl,
+    checkedLinks: links,
+    verified,
+    log
+  }, null, 2));
+})();
+
+
