@@ -1,108 +1,98 @@
-const { chromium } = require("playwright");
-
-// List of proxies (add more free proxies here if necessary)
-const proxies = [
-  "http://51.158.68.133:8811",  // Example proxies
-  "http://185.44.12.85:8080",
-  "http://51.15.79.41:3128"
-];
+const { chromium } = require('playwright');
 
 (async () => {
-  const [,, person, company, city, state] = process.argv;
-  const query = `${person} ${company} ${city} ${state}`;
-  const log = [];
-
   const browser = await chromium.launch({
-    headless: true,
     executablePath: '/usr/bin/chromium-browser',
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const page = await browser.newPage();
+  const urls = process.argv.slice(2); // Read URLs from command line arguments
 
-  // Function to randomly pick a proxy from the list
-  const getRandomProxy = () => {
-    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-    return proxy;
-  };
+  // Loop through each URL to scrape
+  for (const url of urls) {
+    let result = { url, mapLinks: [], addresses: [], foundEmployee: false };
 
-  // Function to apply the selected proxy
-  const applyProxy = async () => {
-    const proxy = getRandomProxy();
-    await page.context().setHTTPCredentials({
-      proxy: {
-        server: proxy, // Apply the proxy to the page
-      }
-    });
-    log.push(`Using proxy: ${proxy}`);
-  };
-
-  const engines = [
-    { name: 'Google', url: `https://www.google.com/search?q=${encodeURIComponent(query)}`, selectors: ["h3", ".tF2Cxc"] },
-    { name: 'LinkedIn', url: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(person)}%20${encodeURIComponent(company)}`, selectors: ["a.search-result__result-link"] }
-  ];
-
-  // Search and verify in parallel
-  const enginePromises = engines.map(engine => {
-    return page.goto(engine.url, { waitUntil: "domcontentloaded", timeout: 30000 })
-      .then(async () => {
-        await applyProxy();
-        return getLinks(engine.selectors, engine.name);
-      })
-      .catch(e => log.push(`${engine.name} failed to load: ${e.message}`));
-  });
-
-  const getLinks = async (selectors, engineName) => {
-    for (const sel of selectors) {
-      try {
-        await page.waitForSelector(sel, { timeout: 20000 });
-        const found = await page.$$eval(sel, as => 
-          as.map(a => a.href).filter(h => h && h.startsWith("http"))
-        );
-        if (found.length) {
-          log.push(`${engineName}: Found ${found.length} results with selector ${sel}`);
-          return found;
-        } else {
-          log.push(`${engineName}: No results found`);
-        }
-      } catch (e) {
-        log.push(`${engineName}: Failed on selector ${sel} → ${e.message}`);
-      }
-    }
-    return [];
-  };
-
-  const allLinks = await Promise.all(enginePromises);
-  let verified = false;
-
-  const verificationPromises = allLinks.flat().map(async (link) => {
     try {
-      await page.goto(link, { timeout: 10000, waitUntil: "domcontentloaded" });
-      const text = await page.content();
+      const page = await browser.newPage();
+      let response = await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
 
-      const pageText = text.toLowerCase(); // Case insensitive search
-      if (pageText.includes(person.toLowerCase()) && pageText.includes(company.toLowerCase())) {
-        verified = true;
-        log.push(`Verified match on ${link}`);
-      } else {
-        log.push(`Checked ${link} → no match`);
+      if (response) {
+        result.status = response.status();
+        result.statusText = response.statusText();
       }
-    } catch (e) {
-      log.push(`Error visiting ${link}: ${e.message}`);
-    }
-  });
 
-  await Promise.all(verificationPromises);
+      // Wait for content to load
+      await page.waitForTimeout(5000);
+
+      // 1. Scrape links to specific pages like 'About Us', 'Our Team', etc.
+      const teamLinks = await page.$$eval(
+        'a[href*="team"], a[href*="about"], a[href*="staff"], a[href*="our-team"]', // Searching for common team-related keywords
+        anchors => anchors.map(a => a.href)
+      );
+
+      // 2. Try to extract employee names from the pages
+      const extractEmployeeNames = async (url) => {
+        try {
+          const employeeNames = [];
+          const teamPage = await browser.newPage();
+          await teamPage.goto(url, { waitUntil: 'domcontentloaded' });
+
+          // Wait for the page to load
+          await teamPage.waitForTimeout(5000);
+
+          // Scrape staff names or any visible employee details (this can be customized based on the page structure)
+          const names = await teamPage.$$eval(
+            'h2, h3, .staff-name, .team-member', // Add other potential selectors for employee names
+            elements => elements.map(el => el.innerText.trim())
+          );
+
+          employeeNames.push(...names);
+          await teamPage.close();
+          return employeeNames;
+        } catch (err) {
+          console.error(`Error scraping team page: ${err.message}`);
+          return [];
+        }
+      };
+
+      // If 'Our Team' or similar pages are found, scrape employee names
+      if (teamLinks.length > 0) {
+        for (const link of teamLinks) {
+          const employeeNames = await extractEmployeeNames(link);
+          if (employeeNames.length > 0) {
+            // Here, you can compare employee names with the person’s name (from the sheet)
+            const personName = "John Doe";  // This should come from your Google Sheets data (e.g., via n8n input)
+            if (employeeNames.some(name => name.toLowerCase().includes(personName.toLowerCase()))) {
+              result.foundEmployee = true;
+              break;  // If employee is found, stop checking further
+            }
+          }
+        }
+      }
+
+      // If no employee name found in the team pages, check the main page for mentions
+      if (!result.foundEmployee) {
+        const mainPageText = await page.evaluate(() => document.body.innerText);
+        const personName = "John Doe";  // This should come from your Google Sheets data
+
+        // Check if the person's name is mentioned anywhere on the main page
+        if (mainPageText.toLowerCase().includes(personName.toLowerCase())) {
+          result.foundEmployee = true;
+        }
+      }
+
+      // Final result (whether employee is found or not)
+      await page.close();
+    } catch (err) {
+      result.error = err.message;
+    }
+
+    console.log(JSON.stringify(result));  // Output the result in JSON format
+  }
 
   await browser.close();
-
-  console.log(JSON.stringify({
-    person,
-    company,
-    city,
-    state,
-    query,
-    verified,
-    log
-  }, null, 2));
 })();
