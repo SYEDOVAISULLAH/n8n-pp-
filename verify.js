@@ -7,92 +7,95 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const urls = process.argv.slice(2); // Read URLs from command line arguments
+  // Get URLs and person name from command line arguments
+  const args = process.argv.slice(2);
+  const websiteUrl = args[0];   // The company website URL
+  const personName = args[1];   // The person's name to search for
 
-  // Loop through each URL to scrape
-  for (const url of urls) {
-    let result = { url, mapLinks: [], addresses: [], foundEmployee: false };
+  let result = { url: websiteUrl, foundEmployee: false, employeeNames: [], error: null };
 
-    try {
-      const page = await browser.newPage();
-      let response = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
-      });
+  try {
+    const page = await browser.newPage();
+    
+    // Go to the company website
+    let response = await page.goto(websiteUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
 
-      if (response) {
-        result.status = response.status();
-        result.statusText = response.statusText();
-      }
-
-      // Wait for content to load
-      await page.waitForTimeout(5000);
-
-      // 1. Scrape links to specific pages like 'About Us', 'Our Team', etc.
-      const teamLinks = await page.$$eval(
-        'a[href*="team"], a[href*="about"], a[href*="staff"], a[href*="our-team"]', // Searching for common team-related keywords
-        anchors => anchors.map(a => a.href)
-      );
-
-      // 2. Try to extract employee names from the pages
-      const extractEmployeeNames = async (url) => {
-        try {
-          const employeeNames = [];
-          const teamPage = await browser.newPage();
-          await teamPage.goto(url, { waitUntil: 'domcontentloaded' });
-
-          // Wait for the page to load
-          await teamPage.waitForTimeout(5000);
-
-          // Scrape staff names or any visible employee details (this can be customized based on the page structure)
-          const names = await teamPage.$$eval(
-            'h2, h3, .staff-name, .team-member', // Add other potential selectors for employee names
-            elements => elements.map(el => el.innerText.trim())
-          );
-
-          employeeNames.push(...names);
-          await teamPage.close();
-          return employeeNames;
-        } catch (err) {
-          console.error(`Error scraping team page: ${err.message}`);
-          return [];
-        }
-      };
-
-      // If 'Our Team' or similar pages are found, scrape employee names
-      if (teamLinks.length > 0) {
-        for (const link of teamLinks) {
-          const employeeNames = await extractEmployeeNames(link);
-          if (employeeNames.length > 0) {
-            // Here, you can compare employee names with the person’s name (from the sheet)
-            const personName = "John Doe";  // This should come from your Google Sheets data (e.g., via n8n input)
-            if (employeeNames.some(name => name.toLowerCase().includes(personName.toLowerCase()))) {
-              result.foundEmployee = true;
-              break;  // If employee is found, stop checking further
-            }
-          }
-        }
-      }
-
-      // If no employee name found in the team pages, check the main page for mentions
-      if (!result.foundEmployee) {
-        const mainPageText = await page.evaluate(() => document.body.innerText);
-        const personName = "John Doe";  // This should come from your Google Sheets data
-
-        // Check if the person's name is mentioned anywhere on the main page
-        if (mainPageText.toLowerCase().includes(personName.toLowerCase())) {
-          result.foundEmployee = true;
-        }
-      }
-
-      // Final result (whether employee is found or not)
-      await page.close();
-    } catch (err) {
-      result.error = err.message;
+    if (response) {
+      result.status = response.status();
+      result.statusText = response.statusText();
     }
 
-    console.log(JSON.stringify(result));  // Output the result in JSON format
+    // Wait for the page content to load
+    await page.waitForTimeout(5000);
+
+    // Step 1: Scrape links for team pages (About Us, Our Team, etc.)
+    const teamLinks = await page.$$eval(
+      'a[href*="team"], a[href*="about"], a[href*="staff"], a[href*="our-team"]',  // Looking for common team-related keywords
+      anchors => anchors.map(a => a.href)
+    );
+
+    // Step 2: Extract employee names from the team pages if found
+    const extractEmployeeNames = async (url) => {
+      try {
+        const employeeNames = [];
+        const teamPage = await browser.newPage();
+        await teamPage.goto(url, { waitUntil: 'domcontentloaded' });
+
+        // Wait for the page to load
+        await teamPage.waitForTimeout(5000);
+
+        // Scrape visible employee details, looking for headings or specific classes that contain staff names
+        const names = await teamPage.$$eval(
+          'h2, h3, .staff-name, .team-member',  // Add more selectors based on the website structure
+          elements => elements.map(el => el.innerText.trim())
+        );
+
+        employeeNames.push(...names);
+        await teamPage.close();
+        return employeeNames;
+      } catch (err) {
+        console.error(`Error scraping team page: ${err.message}`);
+        return [];
+      }
+    };
+
+    // Step 3: Check if any team page contains the person’s name
+    if (teamLinks.length > 0) {
+      for (const link of teamLinks) {
+        const employeeNames = await extractEmployeeNames(link);
+        result.employeeNames.push(...employeeNames);  // Collect all employee names
+
+        // Check if any employee name matches the target person's name
+        if (employeeNames.some(name => name.toLowerCase().includes(personName.toLowerCase()))) {
+          result.foundEmployee = true;
+          break;  // If the person is found, stop checking further
+        }
+      }
+    }
+
+    // Step 4: If no employee name found in the team pages, check the main page for mentions
+    if (!result.foundEmployee) {
+      const mainPageText = await page.evaluate(() => document.body.innerText);
+
+      // Check if the person's name is mentioned anywhere on the main page
+      if (mainPageText.toLowerCase().includes(personName.toLowerCase())) {
+        result.foundEmployee = true;
+      }
+    }
+
+    // Close the page after scraping
+    await page.close();
+
+  } catch (err) {
+    result.error = err.message;
   }
 
+  // Output the result in JSON format
+  console.log(JSON.stringify(result));
+
+  // Close the browser when done
   await browser.close();
 })();
