@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 
+// Normalize the name by removing titles like "Dr.", "Mr.", etc., and trimming extra spaces
 function normalizeName(name) {
-  // Remove common titles like 'Dr.', 'Mr.', etc., and trim any extra spaces
   return name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s*/i, '').toLowerCase().trim();
 }
 
@@ -67,31 +67,29 @@ function normalizeName(name) {
       }
     };
 
-// Step 3: Check if any team page contains the person’s name
-if (teamLinks.length > 0) {
-  for (const link of teamLinks) {
-    const employeeNames = await extractEmployeeNames(link);
-    result.employeeNames.push(...employeeNames);  // Collect all employee names
+    // Step 3: Check if any team page contains the person’s name
+    if (teamLinks.length > 0) {
+      for (const link of teamLinks) {
+        const employeeNames = await extractEmployeeNames(link);
+        result.employeeNames.push(...employeeNames);  // Collect all employee names
 
-    // Normalize and compare the employee names with the target person's name
-    if (employeeNames.some(name => normalizeName(name) === normalizeName(personName))) {
-      result.foundEmployee = true;
-      break;  // If the person is found, stop checking further
+        // Normalize and compare the employee names with the target person's name
+        if (employeeNames.some(name => normalizeName(name).includes(normalizeName(personName)))) {
+          result.foundEmployee = true;
+          break;  // If the person is found, stop checking further
+        }
+      }
     }
-  }
-}
-
 
     // Step 4: If no employee name found in the team pages, check the main page for mentions
-if (!result.foundEmployee) {
-  const mainPageText = await page.evaluate(() => document.body.innerText);
+    if (!result.foundEmployee) {
+      const mainPageText = await page.evaluate(() => document.body.innerText);
 
-  // Normalize and check if the person's name is mentioned anywhere on the main page
-  if (mainPageText.toLowerCase().includes(normalizeName(personName))) {
-    result.foundEmployee = true;
-  }
-}
-
+      // Normalize and check if the person's name is mentioned anywhere on the main page
+      if (mainPageText.toLowerCase().includes(normalizeName(personName))) {
+        result.foundEmployee = true;
+      }
+    }
 
     // Close the page after scraping
     await page.close();
