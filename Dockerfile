@@ -15,7 +15,7 @@ RUN apk add --no-cache \
     ttf-freefont \
     chromium \
     chromium-chromedriver \
-    && npm install -g playwright node-fetch
+    npx -y playwright@1.55.0 install --with-deps
 
 # Update Playwright to the latest version
 RUN npm install -g playwright@latest
