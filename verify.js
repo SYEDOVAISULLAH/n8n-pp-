@@ -1,10 +1,5 @@
 const { chromium } = require('playwright');
 
-// Normalize the name by removing titles like "Dr.", "Mr.", etc., and trimming extra spaces
-function normalizeName(name) {
-  return name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s*/i, '').toLowerCase().trim();
-}
-
 (async () => {
   const browser = await chromium.launch({
     executablePath: '/usr/bin/chromium-browser',
@@ -12,11 +7,10 @@ function normalizeName(name) {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  // Get URLs and person's name from command line arguments
+  // Get URLs and person name from command line arguments
   const args = process.argv.slice(2);
-  const websiteUrl = args[0];  // The company website URL
-  const firstName = args[1];   // The person's first name to search for
-  const lastName = args[2];    // The person's last name to search for
+  const websiteUrl = args[0];   // The company website URL
+  const personName = args[1];   // The person's name to search for
 
   let result = { url: websiteUrl, foundEmployee: false, employeeNames: [], error: null };
 
@@ -68,17 +62,14 @@ function normalizeName(name) {
       }
     };
 
-    // Step 3: Check if any team page contains the person's name (either first or last name)
+    // Step 3: Check if any team page contains the person’s name
     if (teamLinks.length > 0) {
       for (const link of teamLinks) {
         const employeeNames = await extractEmployeeNames(link);
         result.employeeNames.push(...employeeNames);  // Collect all employee names
 
-        // Normalize and compare the employee names with the target person's first or last name
-        if (employeeNames.some(name => 
-          normalizeName(name).includes(normalizeName(firstName)) || 
-          normalizeName(name).includes(normalizeName(lastName))
-        )) {
+        // Check if any employee name matches the target person's name
+        if (employeeNames.some(name => name.toLowerCase().includes(personName.toLowerCase()))) {
           result.foundEmployee = true;
           break;  // If the person is found, stop checking further
         }
@@ -89,9 +80,8 @@ function normalizeName(name) {
     if (!result.foundEmployee) {
       const mainPageText = await page.evaluate(() => document.body.innerText);
 
-      // Normalize and check if either the first name or last name is mentioned anywhere on the main page
-      if (mainPageText.toLowerCase().includes(normalizeName(firstName)) || 
-          mainPageText.toLowerCase().includes(normalizeName(lastName))) {
+      // Check if the person's name is mentioned anywhere on the main page
+      if (mainPageText.toLowerCase().includes(personName.toLowerCase())) {
         result.foundEmployee = true;
       }
     }
