@@ -23,14 +23,9 @@ const { chromium } = require('playwright');
       timeout: 60000
     });
 
-    // Log the response status to check if the page is loading correctly
-    console.log('Response Status:', response.status(), response.statusText()); // Log status and status text
-
-    if (response.status() !== 200) {
-      result.error = `Failed to load the LinkedIn profile. Status: ${response.status()}`;
-      console.log(result.error); // Log the error if the page doesn't load correctly
-      await browser.close();
-      return;
+    if (response) {
+      result.status = response.status();
+      result.statusText = response.statusText();
     }
 
     // Wait for the page content to load
@@ -60,4 +55,5 @@ const { chromium } = require('playwright');
   console.log(JSON.stringify(result));
 
   // Close the browser when done
-  await bro
+  await browser.close();
+})();
