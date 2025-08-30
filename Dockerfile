@@ -17,12 +17,8 @@ RUN apk add --no-cache \
     chromium-chromedriver \
     && npm install -g playwright node-fetch
 
-# Install Playwright with system dependencies
-RUN npx playwright install --with-deps
-
-# Set the Playwright cache directory to avoid path issues
-ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
-
+# Install Playwright + Chromium
+RUN npx playwright install chromium
 
 # Create directory for custom scripts
 RUN mkdir -p /home/node/scripts
@@ -34,5 +30,8 @@ COPY workflow.js /home/node/scripts/workflow.js
 
 # Give ownership to node user
 RUN chown -R node:node /home/node/scripts
+
+# Set environment variables for proxies (if you want to pass them in container)
+# ENV PROXY_LIST="http://51.158.68.133:8811, http://185.44.12.85:8080"
 
 USER node
