@@ -3,8 +3,8 @@ const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch({
     executablePath: '/usr/bin/chromium-browser',
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    headless: false,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--incognito']
   });
 
   // Get LinkedIn URL and Company Name from command line arguments
