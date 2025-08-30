@@ -7,18 +7,18 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  // Get URLs and person name from command line arguments
+  // Get LinkedIn URL and Company Name from command line arguments
   const args = process.argv.slice(2);
-  const websiteUrl = args[0];   // The company website URL
-  const personName = args[1];   // The person's name to search for
+  const linkedInProfile = args[0];  // The person's LinkedIn profile URL
+  const companyName = args[1];      // The company name to check
 
-  let result = { url: websiteUrl, foundEmployee: false, employeeNames: [], error: null };
+  let result = { linkedInProfile, foundCompany: false, previousCompanies: [], error: null };
 
   try {
     const page = await browser.newPage();
     
-    // Go to the company website
-    let response = await page.goto(websiteUrl, {
+    // Go to the LinkedIn profile
+    let response = await page.goto(linkedInProfile, {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });
@@ -31,59 +31,17 @@ const { chromium } = require('playwright');
     // Wait for the page content to load
     await page.waitForTimeout(5000);
 
-    // Step 1: Scrape links for team pages (About Us, Our Team, etc.)
-    const teamLinks = await page.$$eval(
-      'a[href*="team"], a[href*="about"], a[href*="staff"], a[href*="our-team"]',  // Looking for common team-related keywords
-      anchors => anchors.map(a => a.href)
+    // Step 1: Scrape the current and previous job companies from the LinkedIn profile
+    const jobHistory = await page.$$eval(
+      '.experience-section li .pv-entity__secondary-title',  // This selector targets company names in the experience section
+      items => items.map(item => item.innerText.trim())
     );
 
-    // Step 2: Extract employee names from the team pages if found
-    const extractEmployeeNames = async (url) => {
-      try {
-        const employeeNames = [];
-        const teamPage = await browser.newPage();
-        await teamPage.goto(url, { waitUntil: 'domcontentloaded' });
+    // Step 2: Check if the person currently works or has worked at the specified company
+    result.previousCompanies = jobHistory;  // Store all previous companies
 
-        // Wait for the page to load
-        await teamPage.waitForTimeout(5000);
-
-        // Scrape visible employee details, looking for headings or specific classes that contain staff names
-        const names = await teamPage.$$eval(
-          'h2, h3, .staff-name, .team-member',  // Add more selectors based on the website structure
-          elements => elements.map(el => el.innerText.trim())
-        );
-
-        employeeNames.push(...names);
-        await teamPage.close();
-        return employeeNames;
-      } catch (err) {
-        console.error(`Error scraping team page: ${err.message}`);
-        return [];
-      }
-    };
-
-    // Step 3: Check if any team page contains the person’s name
-    if (teamLinks.length > 0) {
-      for (const link of teamLinks) {
-        const employeeNames = await extractEmployeeNames(link);
-        result.employeeNames.push(...employeeNames);  // Collect all employee names
-
-        // Check if any employee name matches the target person's name
-        if (employeeNames.some(name => name.toLowerCase().includes(personName.toLowerCase()))) {
-          result.foundEmployee = true;
-          break;  // If the person is found, stop checking further
-        }
-      }
-    }
-
-    // Step 4: If no employee name found in the team pages, check the main page for mentions
-    if (!result.foundEmployee) {
-      const mainPageText = await page.evaluate(() => document.body.innerText);
-
-      // Check if the person's name is mentioned anywhere on the main page
-      if (mainPageText.toLowerCase().includes(personName.toLowerCase())) {
-        result.foundEmployee = true;
-      }
+    if (jobHistory.some(company => company.toLowerCase().includes(companyName.toLowerCase()))) {
+      result.foundCompany = true;  // If the company is found, set the flag to true
     }
 
     // Close the page after scraping
