@@ -7,64 +7,51 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  // Get LinkedIn URLs from the command line arguments
-  const urls = process.argv.slice(2);
+  // Get person name and company from the command line arguments
+  const args = process.argv.slice(2);
+  const personName = args[0];   // e.g., "Melanie Beam"
+  const companyName = args[1];  // e.g., "Akron Dental Care"
 
-  for (const url of urls) {
-    let result = { url, profileData: {}, error: null };
+  let result = { personName, companyName, profileData: {}, error: null };
 
-    try {
-      const page = await browser.newPage();
+  try {
+    const page = await browser.newPage();
 
-      let response = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
-      });
+    // Build Google search query
+    const searchQuery = `site:linkedin.com/in "${personName}" "${companyName}"`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 
-      if (response) {
-        result.status = response.status();
-        result.statusText = response.statusText();
-      }
+    // Go to Google search results
+    let response = await page.goto(searchUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
 
-      // Wait for content to fully load
-      await page.waitForTimeout(5000);
-
-      // Step 1: Extract the raw HTML of the LinkedIn profile
-      const pageHTML = await page.content();
-
-      // Step 2: Search for key elements in the HTML (for example, company name and job title)
-      // Scrape name and current company from LinkedIn profile
-      const name = await page.$eval('.top-card-layout__title', el => el.innerText.trim()).catch(() => null);  // Name selector
-      const currentCompany = await page.$eval('.top-card-layout__company', el => el.innerText.trim()).catch(() => null);  // Current company selector
-      const jobTitle = await page.$eval('.top-card-layout__headline', el => el.innerText.trim()).catch(() => null);  // Job title selector
-
-      // Save the extracted data in the result
-      result.profileData = {
-        name: name || 'Not found',
-        currentCompany: currentCompany || 'Not found',
-        jobTitle: jobTitle || 'Not found',
-      };
-
-      // Step 3: If no profile data found, look for more detailed information in HTML (fallback)
-      if (!name || !currentCompany) {
-        const bodyText = await page.evaluate(() => document.body.innerText);
-
-        // Simple regex for searching company names or other information
-        const companyRegex = /([A-Za-z0-9&]+(?: Inc| LLC| Ltd| Co| Corp| International)?)/g;
-        const matches = bodyText.match(companyRegex);
-
-        if (matches) {
-          result.profileData.fallbackCompanies = matches;
-        }
-      }
-
-      await page.close();
-    } catch (err) {
-      result.error = err.message;
+    if (response) {
+      result.status = response.status();
+      result.statusText = response.statusText();
     }
 
-    console.log(JSON.stringify(result));
+    // Wait for results to load
+    await page.waitForTimeout(5000);
+
+    // Extract the first search result snippet (title + description)
+    const title = await page.$eval('h3', el => el.innerText).catch(() => null);
+    const snippet = await page.$eval('.VwiC3b', el => el.innerText).catch(() => null);
+
+    result.profileData = {
+      name: personName,
+      company: companyName,
+      snippet: snippet || 'Not found',
+      title: title || 'Not found'
+    };
+
+    await page.close();
+  } catch (err) {
+    result.error = err.message;
   }
+
+  console.log(JSON.stringify(result));
 
   await browser.close();
 })();
