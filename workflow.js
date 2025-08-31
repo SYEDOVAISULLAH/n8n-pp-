@@ -46,6 +46,9 @@ const { chromium } = require('playwright');
       title: title || 'Not found'
     };
 
+    // Add the search URL for debugging
+    result.searchUrl = searchUrl;
+
     await page.close();
   } catch (err) {
     result.error = err.message;
