@@ -7,21 +7,24 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  // Get person name and company from the command line arguments
   const args = process.argv.slice(2);
-  const personName = args[0];   // e.g., "Melanie Beam"
-  const companyName = args[1];  // e.g., "Akron Dental Care"
+  const personName = args[0];
+  const companyName = args[1];
 
   let result = { personName, companyName, profileData: {}, error: null };
 
   try {
     const page = await browser.newPage();
 
-    // Build Google search query
+    // Pretend to be a normal browser
+    await page.setExtraHTTPHeaders({
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    });
+
     const searchQuery = `site:linkedin.com/in "${personName}" "${companyName}"`;
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 
-    // Go to Google search results
     let response = await page.goto(searchUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 60000
@@ -32,21 +35,28 @@ const { chromium } = require('playwright');
       result.statusText = response.statusText();
     }
 
-    // Wait for results to load
     await page.waitForTimeout(5000);
 
-    // Extract the first search result snippet (title + description)
-    const title = await page.$eval('h3', el => el.innerText).catch(() => null);
-    const snippet = await page.$eval('.VwiC3b', el => el.innerText).catch(() => null);
+    // Grab all search results
+    const results = await page.$$eval('div.tF2Cxc', nodes =>
+      nodes.map(node => ({
+        title: node.querySelector('h3')?.innerText || null,
+        snippet: node.querySelector('.VwiC3b')?.innerText || null,
+        link: node.querySelector('a')?.href || null
+      }))
+    );
+
+    // Pick the first LinkedIn result if available
+    const linkedinResult = results.find(r => r.link && r.link.includes("linkedin.com/in"));
 
     result.profileData = {
       name: personName,
       company: companyName,
-      snippet: snippet || 'Not found',
-      title: title || 'Not found'
+      title: linkedinResult?.title || "Not found",
+      snippet: linkedinResult?.snippet || "Not found",
+      link: linkedinResult?.link || "Not found"
     };
 
-    // Add the search URL for debugging
     result.searchUrl = searchUrl;
 
     await page.close();
@@ -55,6 +65,5 @@ const { chromium } = require('playwright');
   }
 
   console.log(JSON.stringify(result));
-
   await browser.close();
 })();
