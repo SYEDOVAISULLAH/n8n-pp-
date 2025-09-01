@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const query = process.argv[2];   // get query from command line
+const query = process.argv[2];  // this will be: `"Melanie Beam" "Akron Dental Care" site:linkedin.com`
   const result = { query, results: [], error: null };
 
   try {
