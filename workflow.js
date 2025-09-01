@@ -12,7 +12,7 @@ const { chromium } = require('playwright');
 
   try {
     const page = await browser.newPage();
-    const url = "https://www.google.com/search?q=" + encodeURIComponent(query);
+    const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(query);
 
     let response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
@@ -25,25 +25,32 @@ const { chromium } = require('playwright');
     }
 
     // Wait for results
-    await page.waitForSelector('a h3', { timeout: 10000 });
+    await page.waitForSelector('.result__title a', { timeout: 10000 });
 
     // Extract search results
     result.results = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('a h3')).map(el => {
-        const link = el.closest('a')?.href || "";
+      return Array.from(document.querySelectorAll('.result__title a')).map(el => {
+        const link = el.href || "";
         const title = el.innerText || "";
-        const snippet = el.parentElement?.parentElement?.querySelector('div')?.innerText || "";
+        const snippet = el.closest('.result').querySelector('.result__snippet')?.innerText || "";
         return { title, snippet, link };
       });
     });
 
     // Basic verification logic:
-    // Check if any LinkedIn link contains the person/company info
+    // Check if any LinkedIn link contains both person and company info
     const lowerQuery = query.toLowerCase();
+    const [name, company] = lowerQuery.replace(/"/g, '').split(/\s+(?=\w+\s+\w+)/); 
+    // ⚠️ you can also pass name/company separately from n8n if you prefer
+
     result.verified = result.results.some(r =>
       r.link.includes("linkedin.com") &&
-      (r.title.toLowerCase().includes("melanie beam") || r.snippet.toLowerCase().includes("melanie beam")) &&
-      (r.title.toLowerCase().includes("akron dental care") || r.snippet.toLowerCase().includes("akron dental care"))
+      (
+        r.title.toLowerCase().includes(name) || r.snippet.toLowerCase().includes(name)
+      ) &&
+      (
+        r.title.toLowerCase().includes(company) || r.snippet.toLowerCase().includes(company)
+      )
     );
 
     await page.close();
