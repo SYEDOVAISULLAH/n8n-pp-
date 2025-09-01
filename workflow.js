@@ -7,8 +7,8 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-const query = process.argv[2];  // this will be: `"Melanie Beam" "Akron Dental Care" site:linkedin.com`
-  const result = { query, results: [], error: null };
+  const query = process.argv[2];  
+  const result = { query, results: [], verified: false, error: null };
 
   try {
     const page = await browser.newPage();
@@ -24,18 +24,27 @@ const query = process.argv[2];  // this will be: `"Melanie Beam" "Akron Dental C
       result.statusText = response.statusText();
     }
 
-    // Wait for results to load
-    await page.waitForTimeout(5000);
+    // Wait for results
+    await page.waitForSelector('a h3', { timeout: 10000 });
 
     // Extract search results
     result.results = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('div.g')).map(el => {
-        const title = el.querySelector('h3')?.innerText || "";
-        const snippet = el.querySelector('.VwiC3b')?.innerText || "";
-        const link = el.querySelector('a')?.href || "";
+      return Array.from(document.querySelectorAll('a h3')).map(el => {
+        const link = el.closest('a')?.href || "";
+        const title = el.innerText || "";
+        const snippet = el.parentElement?.parentElement?.querySelector('div')?.innerText || "";
         return { title, snippet, link };
       });
     });
+
+    // Basic verification logic:
+    // Check if any LinkedIn link contains the person/company info
+    const lowerQuery = query.toLowerCase();
+    result.verified = result.results.some(r =>
+      r.link.includes("linkedin.com") &&
+      (r.title.toLowerCase().includes("melanie beam") || r.snippet.toLowerCase().includes("melanie beam")) &&
+      (r.title.toLowerCase().includes("akron dental care") || r.snippet.toLowerCase().includes("akron dental care"))
+    );
 
     await page.close();
   } catch (err) {
@@ -43,6 +52,5 @@ const query = process.argv[2];  // this will be: `"Melanie Beam" "Akron Dental C
   }
 
   console.log(JSON.stringify(result, null, 2));
-
   await browser.close();
 })();
