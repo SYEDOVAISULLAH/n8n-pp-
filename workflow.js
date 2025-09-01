@@ -7,25 +7,14 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const args = process.argv.slice(2);
-  const personName = args[0];
-  const companyName = args[1];
-
-  let result = { personName, companyName, profileData: {}, error: null };
+  const query = process.argv[2];   // get query from command line
+  const result = { query, results: [], error: null };
 
   try {
     const page = await browser.newPage();
+    const url = "https://www.google.com/search?q=" + encodeURIComponent(query);
 
-    // Pretend to be a normal browser
-    await page.setExtraHTTPHeaders({
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    });
-
-    const searchQuery = `site:linkedin.com/in "${personName}" "${companyName}"`;
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-
-    let response = await page.goto(searchUrl, {
+    let response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });
@@ -35,35 +24,25 @@ const { chromium } = require('playwright');
       result.statusText = response.statusText();
     }
 
+    // Wait for results to load
     await page.waitForTimeout(5000);
 
-    // Grab all search results
-    const results = await page.$$eval('div.tF2Cxc', nodes =>
-      nodes.map(node => ({
-        title: node.querySelector('h3')?.innerText || null,
-        snippet: node.querySelector('.VwiC3b')?.innerText || null,
-        link: node.querySelector('a')?.href || null
-      }))
-    );
-
-    // Pick the first LinkedIn result if available
-    const linkedinResult = results.find(r => r.link && r.link.includes("linkedin.com/in"));
-
-    result.profileData = {
-      name: personName,
-      company: companyName,
-      title: linkedinResult?.title || "Not found",
-      snippet: linkedinResult?.snippet || "Not found",
-      link: linkedinResult?.link || "Not found"
-    };
-
-    result.searchUrl = searchUrl;
+    // Extract search results
+    result.results = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('div.g')).map(el => {
+        const title = el.querySelector('h3')?.innerText || "";
+        const snippet = el.querySelector('.VwiC3b')?.innerText || "";
+        const link = el.querySelector('a')?.href || "";
+        return { title, snippet, link };
+      });
+    });
 
     await page.close();
   } catch (err) {
     result.error = err.message;
   }
 
-  console.log(JSON.stringify(result));
+  console.log(JSON.stringify(result, null, 2));
+
   await browser.close();
 })();
