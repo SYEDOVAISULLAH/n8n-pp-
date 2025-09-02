@@ -7,10 +7,18 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const urls = process.argv.slice(2);
+  const urls = process.argv.slice(2, 3); // The URL will be the first argument after the script
+  const city = process.argv[3]; // City passed as the second argument
+  const state = process.argv[4]; // State passed as the third argument
 
   for (const url of urls) {
-    let result = { url, mapLinks: [], addresses: [] };
+    let result = { 
+      url, 
+      mapLinks: [], 
+      addresses: [],
+      city: city,  // Include city in result
+      state: state,  // Include state in result
+    };
 
     try {
       const page = await browser.newPage();
@@ -66,6 +74,7 @@ const { chromium } = require('playwright');
       result.error = err.message;
     }
 
+    // Log the result to include city and state
     console.log(JSON.stringify(result));
   }
 
