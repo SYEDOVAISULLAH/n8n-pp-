@@ -7,15 +7,20 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const urls = process.argv.slice(2);
+  const args = process.argv.slice(2);
 
-  for (const url of urls) {
-    let result = { url, mapLinks: [], addresses: [] };
+  // Expecting arguments in sets of 3: [url1, city1, state1, url2, city2, state2, ...]
+  for (let i = 0; i < args.length; i += 3) {
+    const url = args[i];
+    const city = args[i + 1];
+    const state = args[i + 2];
+
+    let result = { url, city, state, mapLinks: [], addresses: [] };
 
     try {
       const page = await browser.newPage();
 
-      let response = await page.goto(url, {
+      const response = await page.goto(url, {
         waitUntil: 'domcontentloaded',
         timeout: 60000
       });
@@ -25,7 +30,6 @@ const { chromium } = require('playwright');
         result.statusText = response.statusText();
       }
 
-      // Wait for content to fully load
       await page.waitForTimeout(5000);
 
       // 1. Google Maps shortlinks
@@ -52,7 +56,6 @@ const { chromium } = require('playwright');
       if (result.mapLinks.length === 0) {
         const bodyText = await page.evaluate(() => document.body.innerText);
 
-        // Simple U.S. address regex (street + city + state + zip)
         const addressRegex = /\d{1,5}\s[\w\s.,-]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct)\s*[\s\S]{0,50}?\b[A-Z][a-z]+,\s*[A-Z]{2}\s*\d{5}/g;
 
         const matches = bodyText.match(addressRegex);
@@ -66,6 +69,7 @@ const { chromium } = require('playwright');
       result.error = err.message;
     }
 
+    // Output the result for each URL
     console.log(JSON.stringify(result));
   }
 
