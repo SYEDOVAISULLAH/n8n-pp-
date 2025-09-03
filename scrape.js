@@ -9,15 +9,14 @@ const { chromium } = require('playwright');
 
   const args = process.argv.slice(2);
 
-  // Expecting arguments in sets of 3: [url1, city1, state1, url2, city2, state2, ...]
+  // Expecting arguments in sets of 4: [url1, city1, state1, row1, url2, city2, state2, row2, ...]
   for (let i = 0; i < args.length; i += 4) {
     const url = args[i];
     const city = args[i + 1];
     const state = args[i + 2];
-    const state = args[i + 3];
+    const rowNumber = args[i + 3];   // new row number
 
-
-    let result = { url, city, state, mapLinks: [], addresses: [] };
+    let result = { url, city, state, rowNumber, mapLinks: [], addresses: [] };
 
     try {
       const page = await browser.newPage();
